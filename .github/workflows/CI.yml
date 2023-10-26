@@ -19,14 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.0'
           - '1.9'
-          - 'nightly'
         os:
           - ubuntu-latest
         arch:
           - x64
-          - x86
     steps:
       - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@v1

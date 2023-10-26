@@ -2,7 +2,7 @@ using LoopVectorization
 using Random: bitrand, rand
 using SparseArrays
 
-@eval function Sampler(c::Circuit;enable_T=false)
+@eval function Sampler(c::Circuit;enable_T=true)
     q = all_zeros(SymStabilizer, c.nqubits, c.nsymbols;enable_T=enable_T)
     ns = 0
     nm = 0
@@ -113,7 +113,6 @@ using SparseArrays
                 nm += 1
                 isrand, phase, i1, i3 = projectZ!(q, c.targets[k], ns+1;do_transpose=false)
                 push!(b, phase)
-                @show isrand
                 if isrand
                     ns += 1
                     push!(op_symbol, M)

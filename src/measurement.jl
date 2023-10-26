@@ -79,15 +79,14 @@ function project_cond!(q::SymStabilizer, qubit, symbol_index, cond::Val{IS};do_t
         zero!(q, nq+1;zero_T=true)
         for j in 1:nq
             if IS(q, j, qubit)
-                @show _isone(q, _div1(nq+1),_div3(nq+1),3), _isone(q, _div1(j+q.len3<<_shift3_),_div3(j+q.len3<<_shift3_),3)
                 mul_left!(q, nq+1, j+q.len3<<_shift3_)
-                @show _isone(q, _div1(nq+1),_div3(nq+1),3), _isone(q, _div1(j+q.len3<<_shift3_),_div3(j+q.len3<<_shift3_),3)
             end
         end
 
         if do_transpose
             transpose_d!(q)
         end
+
         return false, count_ones(q.phases[_div1(nq+1),_div3(nq+1)])&1!=0, _div1(nq+1),_div3(nq+1)
     else
         rowswap!(q, anticommutes, q.len3<<_shift3_+anticommutes)
@@ -117,8 +116,16 @@ function project_cond!(q::SymStabilizer, qubit, symbol_index, cond::Val{IS};do_t
         q[anticommutes+q.len3<<_shift3_, qubit] = (false, true)
 
         if q.enable_T
-            @turbo for k1 in axes(q.symbols, 1)
-                q.symbols[k1,symbol_index] ⊻= q.T_inv[k1,ds1,ds3]
+            @inbounds for j in q.min_ns[ds1,ds3]:q.max_ns[ds1,ds3]
+                if _isone(q, ds1, ds3, j)
+                    @turbo for k1 in axes(q.symbols, 1)
+                        q.symbols[k1,j] ⊻= q.T_inv[k1, ds1, ds3]
+                    end
+                end
+            end
+
+            @inbounds @simd for k1 in axes(q.symbols, 1)
+                q.symbols[k1,symbol_index] = q.T_inv[k1,ds1,ds3]
             end
         else
             d32 = _div32(anticommutes+q.len3<<_shift3_)

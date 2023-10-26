@@ -3,11 +3,20 @@ uuid = "04081e7d-9e6e-4c7f-a4e2-5dd6bdca0cfb"
 authors = ["njuwfang <njuwfang@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
 [compat]
-julia = "1"
+LoopVectorization = "0.12.165"
+PrecompileTools = "1"
+julia = "1.9"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "Aqua"]

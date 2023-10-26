@@ -56,18 +56,16 @@ function Base.zero(::Type{SymStabilizer}, nq, ns;enable_T=false)
     @inbounds for row in 1:nq
         j3 = _div3(row)
         j1 = _div1(row)
-        j = (j3-1)<<_shift3_+j1
-        d = _div32(j)
-        pow = _pow32(j)
+        d = _div32(row)
+        pow = _pow32(row)
         T[d,j1,j3] = pow
         T_inv[d,j1,j3] = pow
     end
     @inbounds for row in 1+len3<<_shift3_:nq+len3<<_shift3_
         j3 = _div3(row)
         j1 = _div1(row)
-        j = (j3-1)<<_shift3_+j1
-        d = _div32(j)
-        pow = _pow32(j)
+        d = _div32(row)
+        pow = _pow32(row)
         T[d,j1,j3] = pow
         T_inv[d,j1,j3] = pow
     end
@@ -164,14 +162,6 @@ function zero!(q::SymStabilizer, row;zero_T=false)
             @turbo for j1 in axes(q.T, 1)
                 q.T[j1,dr1,dr3] = zero(UInt32)
             end
-        else
-            @inbounds for j in q.min_ns[dr1,dr3]:q.max_ns[dr1,dr3]
-                if _isone(q, dr1, dr3, j)
-                    @turbo for k1 in axes(q.symbols, 1)
-                        q.symbols[k1,j] ⊻= q.T_inv[k1, dr1, dr3]
-                    end
-                end
-            end
         end
     else
         d32 = _div32(row)
@@ -223,15 +213,19 @@ function rowswap!(q::SymStabilizer, t, s)
     ds1 = _div1(s)
 
     @inbounds for j4 in axes(xzs, 3)
-        xzs[dt1,dt3,j4], xzs[ds1,ds3,j4] = xzs[ds1,ds3,j4], xzs[ds1,dt3,j4]
+        xzs[dt1,dt3,j4], xzs[ds1,ds3,j4] = xzs[ds1,ds3,j4], xzs[dt1,dt3,j4]
     end
 
     q.phases[dt1,dt3], q.phases[ds1,ds3] = q.phases[ds1,ds3], q.phases[dt1,dt3]
 
     if q.enable_T
         @turbo for j1 in axes(q.T, 1)
-            q.T[j1,dt1,dt3], q.T[j1,ds1,ds3] = q.T[j1,ds1,ds3], q.T[j1,dt1,dt3]
-            q.T_inv[j1,dt1,dt3], q.T_inv[j1,ds1,ds3] = q.T_inv[j1,ds1,ds3], q.T_inv[j1,dt1,dt3]
+            a1, b1 = q.T[j1,dt1,dt3], q.T[j1,ds1,ds3]
+            q.T[j1,ds1,ds3] = a1
+            q.T[j1,dt1,dt3] = b1
+            a2, b2 = q.T_inv[j1,dt1,dt3], q.T_inv[j1,ds1,ds3]
+            q.T_inv[j1,ds1,ds3] = a2
+            q.T_inv[j1,dt1,dt3] = b2
         end
     else
         dt32 = _div32(t)
@@ -264,6 +258,32 @@ function _isone(q::SymStabilizer, i1, i3, l)
         pow32 = _pow32(row)
         return q.symbols[d32,l]&pow32!=0
     end
+end
+
+function _ip(q::SymStabilizer, l_T, r_T)
+    cnt = zero(UInt32)
+    dr3 = _div3(r_T)
+    dr1 = _div1(r_T)
+    dl3 = _div3(l_T)
+    dl1 = _div1(l_T)
+    @inbounds @simd for j1 in axes(q.T, 1)
+        cnt ⊻= q.T[j1,dl1,dl3] & q.T_inv[j1,dr1,dr3]
+    end
+
+    count_ones(cnt)&1!=0
+end
+
+function _display_T(q::SymStabilizer)
+    a = Matrix{Bool}(undef, q.nq<<1, q.nq<<1)
+    for j2 in 1:q.nq
+        for j1 in 1:q.nq
+            a[j1,j2] = _ip(q, j1,j2)
+            a[j1+q.nq,j2] = _ip(q, j1+q.len3<<_shift3_,j2)
+            a[j1,j2+q.nq] = _ip(q, j1,j2+q.len3<<_shift3_)
+            a[j1+q.nq,j2+q.nq] = _ip(q, j1+q.len3<<_shift3_,j2+q.len3<<_shift3_)
+        end
+    end
+    display(a)
 end
 
 include("transpose.jl")
@@ -332,7 +352,7 @@ function Base.show(io::IO, q::SymStabilizer)
         println(io)
     end
 end
-#=
+
 @setup_workload begin
     # Putting some things in `@setup_workload` instead of `@compile_workload` can reduce the size of the
     # precompile file and potentially make loading faster.
@@ -343,6 +363,6 @@ end
         circuit = parse_stim(initfile)
         sampler = Sampler(circuit)
     end
-end=#
+end
 
 end
