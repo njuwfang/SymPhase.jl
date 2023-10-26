@@ -116,21 +116,13 @@ function project_cond!(q::SymStabilizer, qubit, symbol_index, cond::Val{IS};do_t
         q[anticommutes+q.len3<<_shift3_, qubit] = (false, true)
 
         if q.enable_T
-            @inbounds for j in q.min_ns[ds1,ds3]:q.max_ns[ds1,ds3]
-                if _isone(q, ds1, ds3, j)
-                    @turbo for k1 in axes(q.symbols, 1)
-                        q.symbols[k1,j] ⊻= q.T_inv[k1, ds1, ds3]
-                    end
-                end
-            end
-
             @inbounds @simd for k1 in axes(q.symbols, 1)
                 q.symbols[k1,symbol_index] = q.T_inv[k1,ds1,ds3]
             end
         else
-            d32 = _div32(anticommutes+q.len3<<_shift3_)
-            pow32 = _pow32(anticommutes+q.len3<<_shift3_)
-            q.symbols[d32,symbol_index] ⊻= pow32
+            d32 = _div32(symbol_index)
+            pow32 = _pow32(symbol_index)
+            q.symbols[d32,ds1,ds3] = pow32
         end
 
         q.min_ns[ds1,ds3] = symbol_index

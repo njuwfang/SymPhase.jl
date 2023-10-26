@@ -2,7 +2,7 @@ using LoopVectorization
 using Random: bitrand, rand
 using SparseArrays
 
-@eval function Sampler(c::Circuit;enable_T=true)
+@eval function Sampler(c::Circuit;enable_T=false)
     q = all_zeros(SymStabilizer, c.nqubits, c.nsymbols;enable_T=enable_T)
     ns = 0
     nm = 0
@@ -10,7 +10,7 @@ using SparseArrays
     IG = _Vector{Int}()
     JG = _Vector{Int}()
     VG = _Vector{UInt8}()
-    b = _Vector{Bool}()
+    b = zeros(Bool, c.nmeasurements)
     op_symbol = OpSymbol()
 
     op = c.ops[1]
@@ -52,7 +52,7 @@ using SparseArrays
         for k in 1:c.target_inds[1]
             nm += 1
             isrand, phase, i1,i3 = projectZ!(q, c.targets[k], ns+1;do_transpose=false)
-            push!(b, phase)
+            b[nm] = phase
             if isrand
                 ns += 1
                 push!(op_symbol, M)
@@ -112,7 +112,7 @@ using SparseArrays
             for k in c.target_inds[j-1]+1:c.target_inds[j]
                 nm += 1
                 isrand, phase, i1, i3 = projectZ!(q, c.targets[k], ns+1;do_transpose=false)
-                push!(b, phase)
+                b[nm] = phase
                 if isrand
                     ns += 1
                     push!(op_symbol, M)
@@ -136,8 +136,8 @@ using SparseArrays
     G = sparse((@view IG.values[1:IG.len]), (@view JG.values[1:JG.len]), (@view VG.values[1:VG.len]), ns, nm)
     #@show IG.len, nm, ns
 
-    sampler = shots -> _Sampler(G, (@view b.values[1:b.len]), op_symbol, shots)
-    sampler(1)
+    sampler = shots -> _Sampler(G, b, op_symbol, shots)
+    precompile(sampler, (Int,))
 
     sampler
 end
@@ -150,7 +150,7 @@ function _Sampler(G, b, op_symbol, shots)
     samples
 end
 
-function bits_mul_s_uint8s!(C::AbstractMatrix{UInt64}, A::Matrix{UInt64}, B::AbstractSparseMatrix{UInt8, Int}, b::AbstractVector{Bool})
+function bits_mul_s_uint8s!(C::Matrix{UInt64}, A::Matrix{UInt64}, B::AbstractSparseMatrix{UInt8, Int}, b::AbstractVector{Bool})
     rv = rowvals(B)
     M, N = size(C)
     @inbounds for n ∈ 1:N

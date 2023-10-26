@@ -30,12 +30,8 @@ function mul_left!(q::SymStabilizer, r, l)
             q.T_inv[j1,dl1,dl3] ⊻= q.T_inv[j1,dr1,dr3]
         end
     else
-        dr32 = _div32(r)
-        powr32 = _pow32(r)
-        dl32 = _div32(l)
-        powl32 = _pow32(l)
-        @inbounds for j in q.min_ns[dl1,dl3]:q.max_ns[dl1,dl3]
-            q.symbols[dr32,j] ⊻= (q.symbols[dl32,j]&powl32!=0)*powr32
+        @turbo for j in _div32(q.min_ns[dl1,dl3]):_div32(q.max_ns[dl1,dl3])
+            q.symbols[j,dr1,dr3] ⊻= q.symbols[j,dl1,dl3]
         end
     end
 

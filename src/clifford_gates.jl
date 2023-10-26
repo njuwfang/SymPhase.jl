@@ -110,13 +110,16 @@ function apply!(q::SymStabilizer, gate::cX, symbol_index)
             end
         end
     else
-        @turbo for j in axes(q.symbols, 1)
-            temp = zero(UInt32)
-            offset = j<<_shift3_
-            for k in 1:32
-                temp += q.temp_phases[offset+k]*q.pow32[k]
+        ds = _div32(symbol_index)
+        pows = _pow32(symbol_index)
+        @inbounds for j3 in axes(q.temp_phases, 2)
+            for j2 in axes(q.temp_phases, 1)
+                if q.temp_phases[j2,j3]
+                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
+                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
+                    q.symbols[ds,j2,j3] ⊻= pows
+                end
             end
-            q.symbols[j,symbol_index] ⊻= temp
         end
     end
 
@@ -166,13 +169,16 @@ function apply!(q::SymStabilizer, gate::cY, symbol_index)
             end
         end
     else
-        @turbo for j in axes(q.symbols, 1)
-            temp = zero(UInt32)
-            offset = j<<_shift3_
-            for k in 1:32
-                temp += q.temp_phases[offset+k]*q.pow32[k]
+        ds = _div32(symbol_index)
+        pows = _pow32(symbol_index)
+        @inbounds for j3 in axes(q.temp_phases, 2)
+            for j2 in axes(q.temp_phases, 1)
+                if q.temp_phases[j2,j3]
+                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
+                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
+                    q.symbols[ds,j2,j3] ⊻= pows
+                end
             end
-            q.symbols[j,symbol_index] ⊻= temp
         end
     end
 
@@ -219,13 +225,16 @@ function apply!(q::SymStabilizer, gate::cZ, symbol_index)
             end
         end
     else
-        @turbo for j in axes(q.symbols, 1)
-            temp = zero(UInt32)
-            offset = j<<_shift3_
-            for k in 1:32
-                temp += q.temp_phases[offset+k]*q.pow32[k]
+        ds = _div32(symbol_index)
+        pows = _pow32(symbol_index)
+        @inbounds for j3 in axes(q.temp_phases, 2)
+            for j2 in axes(q.temp_phases, 1)
+                if q.temp_phases[j2,j3]
+                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
+                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
+                    q.symbols[ds,j2,j3] ⊻= pows
+                end
             end
-            q.symbols[j,symbol_index] ⊻= temp
         end
     end
 

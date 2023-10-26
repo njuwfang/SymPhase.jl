@@ -35,52 +35,61 @@ struct SymStabilizer
     len3::Int
     len4::Int
     enable_T::Bool
-    max_ns::Array{UInt64,2}
-    min_ns::Array{UInt64,2}
+    max_ns::Array{Int64,2}
+    min_ns::Array{Int64,2}
     xzs::Array{UInt8,4}
     phases::Array{UInt8,2}
     temp_phases::Array{Bool,2}
-    symbols::Array{UInt32,2}
+    symbols::Union{Array{UInt32,2},Array{UInt32,3}}
     T::Array{UInt32,3}
     T_inv::Array{UInt32,3}
     temp::Array{UInt8,2}
     pow32::Array{UInt32,1}
+    temp_s::Array{Bool,1}
 end
 
 function Base.zero(::Type{SymStabilizer}, nq, ns;enable_T=false)
     len3 = Int(ceil((nq+1)/_num_packed_bits_))
     len4 = len3<<(Int(log2(_num_packed_bits_))-7)
-    lens = Int(ceil(ns/8))
-    T = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
-    T_inv = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
-    @inbounds for row in 1:nq
-        j3 = _div3(row)
-        j1 = _div1(row)
-        d = _div32(row)
-        pow = _pow32(row)
-        T[d,j1,j3] = pow
-        T_inv[d,j1,j3] = pow
-    end
-    @inbounds for row in 1+len3<<_shift3_:nq+len3<<_shift3_
-        j3 = _div3(row)
-        j1 = _div1(row)
-        d = _div32(row)
-        pow = _pow32(row)
-        T[d,j1,j3] = pow
-        T_inv[d,j1,j3] = pow
+    lens = Int(ceil(ns/32))
+    if enable_T
+        T = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
+        T_inv = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
+        @inbounds for row in 1:nq
+            j3 = _div3(row)
+            j1 = _div1(row)
+            d = _div32(row)
+            pow = _pow32(row)
+            T[d,j1,j3] = pow
+            T_inv[d,j1,j3] = pow
+        end
+        @inbounds for row in 1+len3<<_shift3_:nq+len3<<_shift3_
+            j3 = _div3(row)
+            j1 = _div1(row)
+            d = _div32(row)
+            pow = _pow32(row)
+            T[d,j1,j3] = pow
+            T_inv[d,j1,j3] = pow
+        end
+        symbols = zeros(UInt32, (_num_packed_bits_*len3)>>4, ns)
+    else
+        T = zeros(UInt32, 0,0,0)
+        T_inv = zeros(UInt32, 0,0,0)
+        symbols = zeros(UInt32, lens, _num_packed_bits_, len3<<1)
     end
     SymStabilizer(
         nq, ns, len3, len4, enable_T,
-        zeros(UInt64,_num_packed_bits_,len3<<1),
-        fill(typemax(UInt64), (_num_packed_bits_,len3<<1)),
+        zeros(Int64,_num_packed_bits_,len3<<1),
+        fill(typemax(Int64), (_num_packed_bits_,len3<<1)),
         zeros(UInt8, _num_packed_bits_, 16, len3<<1, len4<<1),
         zeros(UInt8, _num_packed_bits_, len3<<1),
         zeros(Bool, _num_packed_bits_, len3<<1),
-        zeros(UInt32, (_num_packed_bits_*len3)>>4, ns),
+        symbols,
         T,
         T_inv,
         zeros(UInt8, _num_packed_bits_, 16),
-        zeros(UInt32, 32)
+        zeros(UInt32, 32),
+        zeros(Bool, ns)
     )
 end
 
@@ -162,47 +171,35 @@ function zero!(q::SymStabilizer, row;zero_T=false)
             @turbo for j1 in axes(q.T, 1)
                 q.T[j1,dr1,dr3] = zero(UInt32)
             end
+        else
+            # setting symbols to 0 is too time-consuming 
+            low = q.min_ns[dr1,dr3]
+            high = q.max_ns[dr1,dr3]
+            @inbounds for j in low:high
+                cnt = zero(UInt32)
+                @turbo for k in axes(q.symbols, 1)
+                    cnt += count_ones(q.T[k,dr1,dr3] & q.symbols[k,j])
+                end
+                if cnt&1!=0
+                    @turbo for k1 in axes(q.symbols, 1)
+                        q.symbols[k1,j] ⊻= q.T_inv[k1, dr1, dr3]
+                    end
+                end
+            end
         end
     else
-        d32 = _div32(row)
-        pow32 = ~_pow32(row)
-        @inbounds for j in q.min_ns[dr1,dr3]:q.max_ns[dr1,dr3]
-            q.symbols[d32,j] &= pow32
-        end
+        @inbounds @simd for j in _div32(q.min_ns[dr1,dr3]):_div32(q.max_ns[dr1,dr3])
+            q.symbols[j,dr1,dr3] = zero(UInt32)
+        end 
     end
 
-    q.min_ns[dr1,dr3] = typemax(Int)
+    q.min_ns[dr1,dr3] = typemax(Int64)
     q.max_ns[dr1,dr3] = 0
     
     nothing
 end
 
-# copy a row to another row to I for measurement
-function rowcopy!(q::SymStabilizer, t, s)
-    n1,_,n3,n4 = size(q.xzs)
-    xzs = reshape(reinterpret(UInt128, q.xzs), n1,n3,n4)
-
-    dt3 = _div3(t)
-    dt1 = _div1(t)
-    ds3 = _div3(s)
-    ds1 = _div1(s)
-
-    @inbounds for j4 in axes(xzs, 3)
-        xzs[dt1,dt3,j4] = xzs[ds1,ds3,j4]
-    end
-
-    q.phases[dt1,dt3] = q.phases[ds1,ds3]
-
-    @turbo for j1 in axes(q.T, 1)
-        q.T[j1,dt1,dt3] = q.T[j1,ds1,ds3]
-    end
-
-    q.min_ns[dt1,dt3] = q.min_ns[ds1,ds3]
-    q.max_ns[dt1,dt3] = q.max_ns[ds1,ds3]
-
-    nothing
-end
-
+# swap two rows for measurement
 function rowswap!(q::SymStabilizer, t, s)
     n1,_,n3,n4 = size(q.xzs)
     xzs = reshape(reinterpret(UInt128, q.xzs), n1,n3,n4)
@@ -228,14 +225,10 @@ function rowswap!(q::SymStabilizer, t, s)
             q.T_inv[j1,dt1,dt3] = b2
         end
     else
-        dt32 = _div32(t)
-        powt32 = _pow32(t)
-        ds32 = _div32(s)
-        pows32 = _pow32(s)
-        @inbounds for j in min(q.min_ns[dt1,dt3], q.min_ns[ds1,ds3]):max(q.max_ns[dt1,dt3], q.max_ns[ds1,ds3])
-            ss, tt = q.symbols[dt32,j]&powt32!=0, q.symbols[ds32,j]&pows32!=0
-            q.symbols[dt32,j] ⊻= (ss⊻tt)*powt32
-            q.symbols[ds32,j] ⊻= (ss⊻tt)*pows32
+        @turbo for j in axes(q.symbols, 1)
+            a, b = q.symbols[j,ds1,ds3], q.symbols[j,dt1,dt3]
+            q.symbols[j,ds1,ds3] = b
+            q.symbols[j,dt1,dt3] = a
         end
     end
 
@@ -253,37 +246,10 @@ function _isone(q::SymStabilizer, i1, i3, l)
         end
         return count_ones(cnt)&1!=0
     else
-        row = (i3-1)*_num_packed_bits_+i1
-        d32 = _div32(row)
-        pow32 = _pow32(row)
-        return q.symbols[d32,l]&pow32!=0
+        d = _div32(l)
+        pow = _pow32(l)
+        return q.symbols[d,i1,i3]&pow!=0
     end
-end
-
-function _ip(q::SymStabilizer, l_T, r_T)
-    cnt = zero(UInt32)
-    dr3 = _div3(r_T)
-    dr1 = _div1(r_T)
-    dl3 = _div3(l_T)
-    dl1 = _div1(l_T)
-    @inbounds @simd for j1 in axes(q.T, 1)
-        cnt ⊻= q.T[j1,dl1,dl3] & q.T_inv[j1,dr1,dr3]
-    end
-
-    count_ones(cnt)&1!=0
-end
-
-function _display_T(q::SymStabilizer)
-    a = Matrix{Bool}(undef, q.nq<<1, q.nq<<1)
-    for j2 in 1:q.nq
-        for j1 in 1:q.nq
-            a[j1,j2] = _ip(q, j1,j2)
-            a[j1+q.nq,j2] = _ip(q, j1+q.len3<<_shift3_,j2)
-            a[j1,j2+q.nq] = _ip(q, j1,j2+q.len3<<_shift3_)
-            a[j1+q.nq,j2+q.nq] = _ip(q, j1+q.len3<<_shift3_,j2+q.len3<<_shift3_)
-        end
-    end
-    display(a)
 end
 
 include("transpose.jl")
@@ -302,56 +268,7 @@ include("bit_array.jl")
 
 include("sampler.jl")
 
-# prime show
-function Base.show(io::IO, q::SymStabilizer)
-    for row in 1:q.nq
-        for col in 1:q.nq
-            dx4 = _div4(col)
-            dz4 = dx4+q.len4
-            dr3 = _div3(row)
-            dx2 = _div2(col)
-            dz2 = dx2
-            dr1 = _div1(row)
-            pow = _pow(col)
-            x = q.xzs[dr1,dx2,dr3,dx4]&pow!=0
-            z = q.xzs[dr1,dz2,dr3,dz4]&pow!=0
-            if x && z
-                print(io, "Y")
-            elseif x
-                print(io, "X")
-            elseif z
-                print(io, "Z")
-            else
-                print(io, "I")
-            end
-        end
-        println(io)
-    end
-
-    for row in 1:q.nq
-        for col in 1:q.nq
-            dx4 = _div4(col)
-            dz4 = dx4+q.len4
-            dr3 = _div3(row)
-            dx2 = _div2(col)
-            dz2 = dx2
-            dr1 = _div1(row)
-            pow = _pow(col)
-            x = q.xzs[dr1,dx2,dr3+q.len3,dx4]&pow!=0
-            z = q.xzs[dr1,dz2,dr3+q.len3,dz4]&pow!=0
-            if x && z
-                print(io, "Y")
-            elseif x
-                print(io, "X")
-            elseif z
-                print(io, "Z")
-            else
-                print(io, "I")
-            end
-        end
-        println(io)
-    end
-end
+include("misc.jl")
 
 @setup_workload begin
     # Putting some things in `@setup_workload` instead of `@compile_workload` can reduce the size of the
