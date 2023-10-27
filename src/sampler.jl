@@ -113,6 +113,7 @@ using SparseArrays
                 nm += 1
                 isrand, phase, i1, i3 = projectZ!(q, c.targets[k], ns+1;do_transpose=false)
                 b[nm] = phase
+                #@show isrand
                 if isrand
                     ns += 1
                     push!(op_symbol, M)
@@ -120,7 +121,7 @@ using SparseArrays
                     push!(JG, nm)
                     push!(VG, 1)
                 else
-                    for l in q.min_ns[i1,i3]:q.max_ns[i1,i3]
+                    @inbounds for l in q.min_ns[i1,i3]:q.max_ns[i1,i3]
                         if _isone(q, i1, i3, l)
                             push!(IG, l)
                             push!(JG, nm)

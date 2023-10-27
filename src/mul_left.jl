@@ -1,13 +1,13 @@
 function mul_left!(q::SymStabilizer, r, l)
     n1,_,n3,n4 = size(q.xzs)
-    xzs = reshape(reinterpret(UInt128, q.xzs), n1,n3,n4)
+    xzs = reshape(reinterpret(UInt512, q.xzs), n1,n3,n4)
 
     dl1 = _div1(l)
     dl3 = _div3(l)
     dr1 = _div1(r)
     dr3 = _div3(r)
-    cnt1 = zero(UInt128)
-    cnt2 = zero(UInt128)
+    cnt1 = zero(UInt512)
+    cnt2 = zero(UInt512)
 
     @inbounds for j4 in 1:q.len4
         x1, z1 = xzs[dr1, dr3, j4], xzs[dr1, dr3, j4+q.len4]
@@ -30,7 +30,9 @@ function mul_left!(q::SymStabilizer, r, l)
             q.T_inv[j1,dl1,dl3] ⊻= q.T_inv[j1,dr1,dr3]
         end
     else
-        @turbo for j in _div32(q.min_ns[dl1,dl3]):_div32(q.max_ns[dl1,dl3])
+        l = _div32(q.min_ns[dl1,dl3])
+        h = _div32(q.max_ns[dl1,dl3])
+        @turbo for j in l:h
             q.symbols[j,dr1,dr3] ⊻= q.symbols[j,dl1,dl3]
         end
     end

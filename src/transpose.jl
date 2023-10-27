@@ -1,16 +1,16 @@
 # const _num_packed_bits_ = 128
 
-primitive type UInt256 256 end
+#primitive type UInt256 256 end
 
 @inline function _transposed_index(j1,j2)
-    j = (j1-1)<<4+j2-1
+    j = (j1-1)<<6+j2-1
     j%_num_packed_bits_+1, j÷_num_packed_bits_+1
 end
 
 function transpose_p!(q::SymStabilizer)
     for j4 in axes(q.xzs, 4)
         for j3 in axes(q.xzs, 3)
-            _transpose__x16!(q.temp, (@view q.xzs[:,:,j3,j4]))
+            _transpose_512x64!(q.temp, (@view q.xzs[:,:,j3,j4]))
         end
     end
     nothing
@@ -19,7 +19,7 @@ end
 function transpose_d!(q::SymStabilizer)
     for j4 in axes(q.xzs, 4)
         for j3 in axes(q.xzs, 3)
-            _transpose_16x_!(q.temp, (@view q.xzs[:,:,j3,j4]))
+            _transpose_64x512!(q.temp, (@view q.xzs[:,:,j3,j4]))
         end
     end
     nothing
@@ -85,6 +85,64 @@ end
     nothing
 end
 
+@inline function _transpose_512x64!(A, B)
+    n = _num_packed_bits_<<1#length(B)>>3
+    Ar, Br = A, B
+    for j in 0:31
+        interleave!(Ar, Br, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt16, A), reinterpret(UInt16, B)
+    for j in 0:15
+        interleave!(Br, Ar, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt32, A), reinterpret(UInt32, B)
+    for j in 0:7
+        interleave!(Ar, Br, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt64, A), reinterpret(UInt64, B)
+    for j in 0:3
+        interleave!(Br, Ar, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt128, A), reinterpret(UInt128, B)
+    for j in 0:1
+        interleave!(Ar, Br, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt256, A), reinterpret(UInt256, B)
+    for j in 0:0
+        interleave!(Br, Ar, j*n, n)
+    end
+    nothing
+end
+
+@inline function _transpose_64x512!(A, B)
+    n = _num_packed_bits_<<1#length(B)>>3
+    Ar, Br = reinterpret(UInt256, A), reinterpret(UInt256, B)
+    for j in 0:0
+        interleave_i!(Br, Ar, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt128, A), reinterpret(UInt128, B)
+    for j in 0:1
+        interleave_i!(Ar, Br, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt64, A), reinterpret(UInt64, B)
+    for j in 0:3
+        interleave_i!(Br, Ar, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt32, A), reinterpret(UInt32, B)
+    for j in 0:7
+        interleave_i!(Ar, Br, j*n, n)
+    end
+    Ar, Br = reinterpret(UInt16, A), reinterpret(UInt16, B)
+    for j in 0:15
+        interleave_i!(Br, Ar, j*n, n)
+    end
+    Ar, Br = A, B
+    for j in 0:31
+        interleave_i!(Ar, Br, j*n, n)
+    end
+    nothing
+end
+
 @inline function interleave!(A, B, offset, n)
     step = n>>1
     @inbounds for j in 1:step
@@ -98,6 +156,8 @@ end
     step = n>>1
     @inbounds for j in 1:step
         B[offset+j] = A[offset+(j-1)<<1+1]
+    end
+    @inbounds for j in 1:step
         B[offset+j+step] = A[offset+j<<1]
     end
     nothing

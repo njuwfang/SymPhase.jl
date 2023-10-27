@@ -7,6 +7,7 @@ using PrecompileTools
 
 using LoopVectorization
 using SparseArrays
+using BitIntegers
 
 export SymStabilizer, cX, cY, cZ, cPhase, cHadamard, cCNOT
 export all_zeros, apply!, mul_left!, isX, isY, isZ, zero!, rowcopy!, rowswap!, parse_stim, Sampler
@@ -16,11 +17,11 @@ export transpose_p!, transpose_d!, _transpose_16x_!, _transpose__x16!, projectZ!
 const _num_packed_bits_ = 512
 const _shift3_ = Int(log2(_num_packed_bits_))
 
-@inline _div4(j) = (j-1)>>7+1
+@inline _div4(j) = (j-1)>>9+1
 @inline _div3(j) = (j-1)>>_shift3_+1
-@inline _div2(j) = ((j-1)&127)>>3+1
+@inline _div2(j) = ((j-1)&511)>>3+1
 @inline _div1(j) = (j-1)&(_num_packed_bits_-1)+1
-@inline _shift(j) = ((j-1)&127)&7
+@inline _shift(j) = ((j-1)&511)&7
 @inline _pow(j) = one(UInt8)<<_shift(j)
 @inline _div8(j) = (j-1)>>3+1
 @inline _div32(j) = (j-1)>>5+1
@@ -50,7 +51,7 @@ end
 
 function Base.zero(::Type{SymStabilizer}, nq, ns;enable_T=false)
     len3 = Int(ceil((nq+1)/_num_packed_bits_))
-    len4 = len3<<(Int(log2(_num_packed_bits_))-7)
+    len4 = len3
     lens = Int(ceil(ns/32))
     if enable_T
         T = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
@@ -81,13 +82,13 @@ function Base.zero(::Type{SymStabilizer}, nq, ns;enable_T=false)
         nq, ns, len3, len4, enable_T,
         zeros(Int64,_num_packed_bits_,len3<<1),
         fill(typemax(Int64), (_num_packed_bits_,len3<<1)),
-        zeros(UInt8, _num_packed_bits_, 16, len3<<1, len4<<1),
+        zeros(UInt8, _num_packed_bits_, 64, len3<<1, len4<<1),
         zeros(UInt8, _num_packed_bits_, len3<<1),
         zeros(Bool, _num_packed_bits_, len3<<1),
         symbols,
         T,
         T_inv,
-        zeros(UInt8, _num_packed_bits_, 16),
+        zeros(UInt8, _num_packed_bits_, 64),
         zeros(UInt32, 32),
         zeros(Bool, ns)
     )
@@ -155,13 +156,13 @@ end
 # set a row to I for measurement
 function zero!(q::SymStabilizer, row;zero_T=false)
     n1,_,n3,n4 = size(q.xzs)
-    xzs = reshape(reinterpret(UInt128, q.xzs), n1,n3,n4)
+    xzs = reshape(reinterpret(UInt512, q.xzs), n1,n3,n4)
 
     dr3 = _div3(row)
     dr1 = _div1(row)
 
     @inbounds for j4 in axes(xzs, 3)
-        xzs[dr1,dr3,j4] = zero(UInt128)
+        xzs[dr1,dr3,j4] = zero(UInt512)
     end
 
     q.phases[dr1,dr3] = zero(UInt8)
@@ -188,7 +189,9 @@ function zero!(q::SymStabilizer, row;zero_T=false)
             end
         end
     else
-        @inbounds @simd for j in _div32(q.min_ns[dr1,dr3]):_div32(q.max_ns[dr1,dr3])
+        l = _div32(q.min_ns[dr1,dr3])
+        h = _div32(q.max_ns[dr1,dr3])
+        @turbo for j in l:h
             q.symbols[j,dr1,dr3] = zero(UInt32)
         end 
     end
@@ -202,7 +205,7 @@ end
 # swap two rows for measurement
 function rowswap!(q::SymStabilizer, t, s)
     n1,_,n3,n4 = size(q.xzs)
-    xzs = reshape(reinterpret(UInt128, q.xzs), n1,n3,n4)
+    xzs = reshape(reinterpret(UInt512, q.xzs), n1,n3,n4)
 
     dt3 = _div3(t)
     dt1 = _div1(t)
@@ -225,7 +228,9 @@ function rowswap!(q::SymStabilizer, t, s)
             q.T_inv[j1,dt1,dt3] = b2
         end
     else
-        @turbo for j in axes(q.symbols, 1)
+        l = _div32(min(q.min_ns[dt1,dt3], q.min_ns[ds1,ds3]))
+        h = _div32(max(q.max_ns[dt1,dt3], q.max_ns[ds1,ds3]))
+        @turbo for j in l:h#axes(q.symbols, 1)
             a, b = q.symbols[j,ds1,ds3], q.symbols[j,dt1,dt3]
             q.symbols[j,ds1,ds3] = b
             q.symbols[j,dt1,dt3] = a
@@ -269,6 +274,7 @@ include("bit_array.jl")
 include("sampler.jl")
 
 include("misc.jl")
+
 
 @setup_workload begin
     # Putting some things in `@setup_workload` instead of `@compile_workload` can reduce the size of the
