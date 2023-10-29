@@ -2,8 +2,8 @@ using LoopVectorization
 using Random: bitrand, rand
 using SparseArrays
 
-@eval function Sampler(c::Circuit;enable_T=false)
-    q = all_zeros(SymStabilizer, c.nqubits, c.nsymbols;enable_T=enable_T)
+@eval function Sampler(c::Circuit)
+    q = all_zeros(SymStabilizer, c.nqubits, c.nsymbols)
     ns = 0
     nm = 0
 
@@ -32,21 +32,29 @@ using SparseArrays
     ))
 
     if op == DEPOLARIZE1
+        l = _div4s(ns+1)
+        h = _div4s(ns+c.target_inds[1]<<1)
+        transpose_symbols_d!(q, l, h)
         for k in 1:c.target_inds[1]
-            apply!(q, cDepolarize1(c.targets[k]), ns+1, ns+2)
+            apply!(q, cDepolarize1(c.targets[k]), ns+1, ns+2;do_transpose=false)
             ns += 2
             push!(op_symbol, DEPOLARIZE1, c.args[1])
         end
+        transpose_symbols_p!(q, l, h)
     elseif op == CX
         for k in 1:2:c.target_inds[1]
             apply!(q, cCNOT(c.targets[k], c.targets[k+1]))
         end
     elseif op == DEPOLARIZE2
+        l = _div4s(ns+1)
+        h = _div4s(ns+(c.target_inds[1])<<2)
+        transpose_symbols_d!(q, l, h)
         for k in 1:2:c.target_inds[1]
-            apply!(q, cDepolarize2(c.targets[k], c.targets[k+1]), ns+1, ns+2, ns+3, ns+4)
+            apply!(q, cDepolarize2(c.targets[k], c.targets[k+1]), ns+1, ns+2, ns+3, ns+4;do_transpose=false)
             ns += 4
             push!(op_symbol, DEPOLARIZE2, c.args[1])
         end
+        transpose_symbols_p!(q, l, h)
     elseif op == M
         transpose_p!(q)
         for k in 1:c.target_inds[1]
@@ -92,21 +100,29 @@ using SparseArrays
         ))
 
         if op == DEPOLARIZE1
+            l = _div4s(ns+1)
+            h = _div4s(ns+(c.target_inds[j]-c.target_inds[j-1])<<1)
+            transpose_symbols_d!(q, l, h)
             for k in c.target_inds[j-1]+1:c.target_inds[j]
-                apply!(q, cDepolarize1(c.targets[k]), ns+1, ns+2)
+                apply!(q, cDepolarize1(c.targets[k]), ns+1, ns+2;do_transpose=false)
                 ns += 2
                 push!(op_symbol, DEPOLARIZE1, c.args[j])
             end
+            transpose_symbols_p!(q, l, h)
         elseif op == CX
             for k in c.target_inds[j-1]+1:2:c.target_inds[j]
                 apply!(q, cCNOT(c.targets[k], c.targets[k+1]))
             end
         elseif op == DEPOLARIZE2
+            l = _div4s(ns+1)
+            h = _div4s(ns+(c.target_inds[j]-c.target_inds[j-1])<<2)
+            transpose_symbols_d!(q, l, h)
             for k in c.target_inds[j-1]+1:2:c.target_inds[j]
-                apply!(q, cDepolarize2(c.targets[k], c.targets[k+1]), ns+1, ns+2, ns+3, ns+4)
+                apply!(q, cDepolarize2(c.targets[k], c.targets[k+1]), ns+1, ns+2, ns+3, ns+4;do_transpose=false)
                 ns += 4
                 push!(op_symbol, DEPOLARIZE2, c.args[j])
             end
+            transpose_symbols_p!(q, l, h)
         elseif op == M
             transpose_p!(q)
             for k in c.target_inds[j-1]+1:c.target_inds[j]

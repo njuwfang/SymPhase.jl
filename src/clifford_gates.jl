@@ -84,45 +84,31 @@ function apply!(q::SymStabilizer, gate::cX)
     nothing
 end
 
-function apply!(q::SymStabilizer, gate::cX, symbol_index)
+function apply!(q::SymStabilizer, gate::cX, symbol_index;do_transpose=true)
     a = gate.q
     dx4 = _div4(a)
     dz4 = dx4+q.len4
     dx2 = _div2(a)
     dz2 = dx2
     pow = _pow(a)
+    ds1 = _div1s(symbol_index)
+    ds4 = _div4s(symbol_index)
+    shift = _shift(symbol_index) - _shift(a)
+    n1,n2,n3,n4 = size(q.xzs)
+    m1,m2,m3,m4 = size(q.symbols)
+    if do_transpose
+        transpose_symbols_d!(q, ds4, ds4)
+    end
     for j3 in axes(q.xzs, 3)
+        offsetz = (dz4-1)*n3*n2*n1 + (j3-1)*n2*n1 + (dz2-1)*n1
+        offsets = (ds4-1)*m3*m1*m2 + (j3-1)*m1*m2 + (ds1-1)*m2
         @inbounds @simd for j1 in axes(q.xzs, 1)
-            q.temp_phases[j1,j3] = q.xzs[j1,dz2,j3,dz4]&pow!=0
+            q.symbols[j1+offsets] = (q.xzs[j1+offsetz]&pow)<<shift
         end
     end
-
-    if q.enable_T
-        @inbounds for j3 in axes(q.T_inv, 3)
-            for j2 in axes(q.T_inv, 2)
-                if q.temp_phases[j2,j3]
-                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
-                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
-                @turbo for j1 in axes(q.symbols, 1)
-                    q.symbols[j1,symbol_index] ⊻= q.T_inv[j1,j2,j3]
-                end
-            end
-            end
-        end
-    else
-        ds = _div32(symbol_index)
-        pows = _pow32(symbol_index)
-        @inbounds for j3 in axes(q.temp_phases, 2)
-            for j2 in axes(q.temp_phases, 1)
-                if q.temp_phases[j2,j3]
-                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
-                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
-                    q.symbols[ds,j2,j3] ⊻= pows
-                end
-            end
-        end
+    if do_transpose
+        transpose_symbols_p!(q, ds4, ds4)
     end
-
     nothing
 end
 
@@ -142,46 +128,33 @@ function apply!(q::SymStabilizer, gate::cY)
     nothing
 end
 
-function apply!(q::SymStabilizer, gate::cY, symbol_index)
+function apply!(q::SymStabilizer, gate::cY, symbol_index;do_transpose=true)
     a = gate.q
     dx4 = _div4(a)
     dz4 = dx4+q.len4
     dx2 = _div2(a)
     dz2 = dx2
     pow = _pow(a)
+    ds1 = _div1s(symbol_index)
+    ds4 = _div4s(symbol_index)
+    shift = _shift(symbol_index) - _shift(a)
+    n1,n2,n3,n4 = size(q.xzs)
+    m1,m2,m3,m4 = size(q.symbols)
+    if do_transpose
+        transpose_symbols_d!(q, ds4, ds4)
+    end
     for j3 in axes(q.xzs, 3)
+        offsetx = (dx4-1)*n3*n2*n1 + (j3-1)*n2*n1 + (dx2-1)*n1
+        offsetz = (dz4-1)*n3*n2*n1 + (j3-1)*n2*n1 + (dz2-1)*n1
+        offsets = (ds4-1)*m3*m1*m2 + (j3-1)*m1*m2 + (ds1-1)*m2
         @inbounds @simd for j1 in axes(q.xzs, 1)
-            x, z = q.xzs[j1,dx2,j3,dx4], q.xzs[j1,dz2,j3,dz4]
-            q.temp_phases[j1,j3] = (x⊻z)&pow!=0
+            x, z = q.xzs[j1+offsetx], q.xzs[j1+offsetz]
+            q.symbols[j1+offsets] = ((x⊻z)&pow)<<shift
         end
     end
-
-    if q.enable_T
-        @inbounds for j3 in axes(q.T_inv, 3)
-            for j2 in axes(q.T_inv, 2)
-                if q.temp_phases[j2,j3]
-                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
-                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
-                @turbo for j1 in axes(q.symbols, 1)
-                    q.symbols[j1,symbol_index] ⊻= q.T_inv[j1,j2,j3]
-                end
-            end
-            end
-        end
-    else
-        ds = _div32(symbol_index)
-        pows = _pow32(symbol_index)
-        @inbounds for j3 in axes(q.temp_phases, 2)
-            for j2 in axes(q.temp_phases, 1)
-                if q.temp_phases[j2,j3]
-                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
-                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
-                    q.symbols[ds,j2,j3] ⊻= pows
-                end
-            end
-        end
+    if do_transpose
+        transpose_symbols_p!(q, ds4, ds4)
     end
-
     nothing
 end
 
@@ -201,41 +174,28 @@ function apply!(q::SymStabilizer, gate::cZ)
     nothing
 end
 
-function apply!(q::SymStabilizer, gate::cZ, symbol_index)
+function apply!(q::SymStabilizer, gate::cZ, symbol_index;do_transpose=true)
     a = gate.q
     dx4 = _div4(a)
     dx2 = _div2(a)
     pow = _pow(a)
+    ds1 = _div1s(symbol_index)
+    ds4 = _div4s(symbol_index)
+    shift = _shift(symbol_index) - _shift(a)
+    n1,n2,n3,n4 = size(q.xzs)
+    m1,m2,m3,m4 = size(q.symbols)
+    if do_transpose
+        transpose_symbols_d!(q, ds4, ds4)
+    end
     for j3 in axes(q.xzs, 3)
+        offsetx = (dx4-1)*n3*n2*n1 + (j3-1)*n2*n1 + (dx2-1)*n1
+        offsets = (ds4-1)*m3*m1*m2 + (j3-1)*m1*m2 + (ds1-1)*m2
         @inbounds @simd for j1 in axes(q.xzs, 1)
-            q.temp_phases[j1,j3] = q.xzs[j1,dx2,j3,dx4]&pow!=0
+            q.symbols[j1+offsets] = (q.xzs[j1+offsetx]&pow)<<shift
         end
     end
-
-    if q.enable_T
-        @inbounds for j3 in axes(q.T_inv, 3)
-            for j2 in axes(q.T_inv, 2)
-                if q.temp_phases[j2,j3]
-                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
-                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
-                @turbo for j1 in axes(q.symbols, 1)
-                    q.symbols[j1,symbol_index] ⊻= q.T_inv[j1,j2,j3]
-                end
-            end
-            end
-        end
-    else
-        ds = _div32(symbol_index)
-        pows = _pow32(symbol_index)
-        @inbounds for j3 in axes(q.temp_phases, 2)
-            for j2 in axes(q.temp_phases, 1)
-                if q.temp_phases[j2,j3]
-                    q.min_ns[j2,j3] = min(q.min_ns[j2,j3], symbol_index)
-                    q.max_ns[j2,j3] = max(q.max_ns[j2,j3], symbol_index)
-                    q.symbols[ds,j2,j3] ⊻= pows
-                end
-            end
-        end
+    if do_transpose
+        transpose_symbols_p!(q, ds4, ds4)
     end
 
     nothing
@@ -273,14 +233,44 @@ apply!(q::SymStabilizer, gate::cX_error, symbol_index::Int) = apply!(q, cX(gate.
 apply!(q::SymStabilizer, gate::cY_error, symbol_index::Int) = apply!(q, cY(gate.q), symbol_index)
 apply!(q::SymStabilizer, gate::cZ_error, symbol_index::Int) = apply!(q, cZ(gate.q), symbol_index)
 
-function apply!(q::SymStabilizer, gate::cDepolarize1, i1::Int, i2::Int)
-    apply!(q, cX(gate.q), i1)
-    apply!(q, cZ(gate.q), i2)
+function apply!(q::SymStabilizer, gate::cDepolarize1, i1::Int, i2::Int;do_transpose=true)
+    if do_transpose
+        l = _div4(min(i1,i2))
+        h = _div4(max(i1,i2))
+
+        transpose_symbols_d!(q, l, h)
+
+        apply!(q, cX(gate.q), i1;do_transpose=false)
+        apply!(q, cZ(gate.q), i2;do_transpose=false)
+
+        transpose_symbols_p!(q, l, h)
+    else
+        apply!(q, cX(gate.q), i1;do_transpose=false)
+        apply!(q, cZ(gate.q), i2;do_transpose=false)
+    end
+
+    nothing
 end
 
-function apply!(q::SymStabilizer, gate::cDepolarize2, i1::Int, i2::Int, i3::Int, i4::Int)
-    apply!(q, cX(gate.q1), i1)
-    apply!(q, cZ(gate.q1), i2)
-    apply!(q, cX(gate.q2), i3)
-    apply!(q, cZ(gate.q2), i4)
+function apply!(q::SymStabilizer, gate::cDepolarize2, i1::Int, i2::Int, i3::Int, i4::Int;do_transpose=true)
+    if do_transpose
+        l = _div4(min(i1,i2,i3,i4))
+        h = _div4(max(i1,i2,i3,i4))
+
+        transpose_symbols_d!(q, l, h)
+
+        apply!(q, cX(gate.q1), i1;do_transpose=false)
+        apply!(q, cZ(gate.q1), i2;do_transpose=false)
+        apply!(q, cX(gate.q2), i3;do_transpose=false)
+        apply!(q, cZ(gate.q2), i4;do_transpose=false)
+
+        transpose_symbols_p!(q, l, h)
+    else
+        apply!(q, cX(gate.q1), i1;do_transpose=false)
+        apply!(q, cZ(gate.q1), i2;do_transpose=false)
+        apply!(q, cX(gate.q2), i3;do_transpose=false)
+        apply!(q, cZ(gate.q2), i4;do_transpose=false)
+    end
+    
+    nothing
 end

@@ -76,7 +76,7 @@ function project_cond!(q::SymStabilizer, qubit, symbol_index, cond::Val{IS};do_t
     end
 
     if anticommutes == 0
-        zero!(q, nq+1;zero_T=true)
+        zero!(q, nq+1)
         for j in 1:nq
             if IS(q, j, qubit)
                 mul_left!(q, nq+1, j+q.len3<<_shift3_)
@@ -89,7 +89,7 @@ function project_cond!(q::SymStabilizer, qubit, symbol_index, cond::Val{IS};do_t
 
         return false, count_ones(q.phases[_div1(nq+1),_div3(nq+1)])&1!=0, _div1(nq+1),_div3(nq+1)
     else
-        rowswap!(q, anticommutes, q.len3<<_shift3_+anticommutes)
+        rowcopy!(q, anticommutes, q.len3<<_shift3_+anticommutes)
         for j in 1:anticommutes-1
             if IS(q, j, qubit)
                 mul_left!(q, j, anticommutes)
@@ -105,34 +105,30 @@ function project_cond!(q::SymStabilizer, qubit, symbol_index, cond::Val{IS};do_t
                 mul_left!(q, j+q.len3<<_shift3_, anticommutes)
             end
         end
-
+        
         #q[q.len3<<_shift3_+anticommutes, qubit] = (false, true)
         #j1,j2 = _transposed_index(_div1(anticommutes),_div2(symbol_index))
         #q.symbols[j1,j2,_div3(anticommutes)+q.len3,_div4(symbol_index)] ⊻= _pow(symbol_index)
-        ds3 = _div3(anticommutes)+q.len3
-        ds1 = _div1(anticommutes)
+        da3 = _div3(anticommutes)+q.len3
+        da1 = _div1(anticommutes)
+
+        ds1 = _div1s(symbol_index)
+        ds4 = _div4s(symbol_index)
+        pows = _pow(symbol_index)
 
         zero!(q, anticommutes+q.len3<<_shift3_)
         q[anticommutes+q.len3<<_shift3_, qubit] = (false, true)
 
-        if q.enable_T
-            @inbounds @simd for k1 in axes(q.symbols, 1)
-                q.symbols[k1,symbol_index] = q.T_inv[k1,ds1,ds3]
-            end
-        else
-            d32 = _div32(symbol_index)
-            pow32 = _pow32(symbol_index)
-            q.symbols[d32,ds1,ds3] = pow32
-        end
+        q.symbols[ds1,da1,da3,ds4] = pows
 
-        q.min_ns[ds1,ds3] = symbol_index
-        q.max_ns[ds1,ds3] = symbol_index
+        q.min_ns[da1,da3] = symbol_index
+        q.max_ns[da1,da3] = symbol_index
 
         if do_transpose
             transpose_d!(q)
         end
 
-        return true, false, ds1,ds3
+        return true, false, da1,da3
     end
 end
 

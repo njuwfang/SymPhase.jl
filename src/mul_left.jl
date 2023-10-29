@@ -24,16 +24,9 @@ function mul_left!(q::SymStabilizer, r, l)
     
     q.phases[dr1,dr3] ⊻= extra_phase ⊻ q.phases[dl1, dl3]
 
-    if q.enable_T
-        @turbo for j1 in axes(q.T, 1)
-            q.T[j1,dr1,dr3] ⊻= q.T[j1,dl1,dl3]
-            q.T_inv[j1,dl1,dl3] ⊻= q.T_inv[j1,dr1,dr3]
-        end
-    else
-        l = _div32(q.min_ns[dl1,dl3])
-        h = _div32(q.max_ns[dl1,dl3])
-        @turbo for j in l:h
-            q.symbols[j,dr1,dr3] ⊻= q.symbols[j,dl1,dl3]
+    for j4 in _div4s(q.min_ns[dl1,dl3]):_div4s(q.max_ns[dl1,dl3])
+        @turbo for j1 in axes(q.symbols, 1)
+            q.symbols[j1,dr1,dr3,j4] ⊻= q.symbols[j1,dl1,dl3,j4]
         end
     end
 

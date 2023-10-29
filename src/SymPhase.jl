@@ -8,10 +8,12 @@ using PrecompileTools
 using LoopVectorization
 using SparseArrays
 using BitIntegers
+BitIntegers.@define_integers 2048
+BitIntegers.@define_integers 4096
 
 export SymStabilizer, cX, cY, cZ, cPhase, cHadamard, cCNOT
 export all_zeros, apply!, mul_left!, isX, isY, isZ, zero!, rowcopy!, rowswap!, parse_stim, Sampler
-export transpose_p!, transpose_d!, _transpose_16x_!, _transpose__x16!, projectZ!, _transposed_index, _isone
+export transpose_p!, transpose_d!, _transpose_16x_!, _transpose__x16!, projectZ!, _transposed_index, _isone, transpose_symbols_d!,transpose_symbols_p!, _transpose_512x1024!
 #export one, zero, copy
 
 const _num_packed_bits_ = 512
@@ -29,73 +31,41 @@ const _shift3_ = Int(log2(_num_packed_bits_))
 @inline _div128(j) = (j-1)>>7+1
 @inline _pow32(j) = one(UInt32)<<((j-1)&31)
 @inline _pow64(j) = one(UInt64)<<((j-1)&63)
+@inline _div4s(j) = (j-1)>>13+1
+@inline _div1s(j) = ((j-1)&8191)>>3+1
 
 struct SymStabilizer
     nq::Int
     ns::Int
     len3::Int
     len4::Int
-    enable_T::Bool
     max_ns::Array{Int64,2}
     min_ns::Array{Int64,2}
     xzs::Array{UInt8,4}
     phases::Array{UInt8,2}
-    temp_phases::Array{Bool,2}
-    symbols::Union{Array{UInt32,2},Array{UInt32,3}}
-    T::Array{UInt32,3}
-    T_inv::Array{UInt32,3}
-    temp::Array{UInt8,2}
-    pow32::Array{UInt32,1}
-    temp_s::Array{Bool,1}
+    symbols::Array{UInt8,4}
+    temp1::Array{UInt8,2}
+    temp2::Array{UInt8,2}
 end
 
-function Base.zero(::Type{SymStabilizer}, nq, ns;enable_T=false)
+function Base.zero(::Type{SymStabilizer}, nq, ns)
     len3 = Int(ceil((nq+1)/_num_packed_bits_))
     len4 = len3
-    lens = Int(ceil(ns/32))
-    if enable_T
-        T = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
-        T_inv = zeros(UInt32, (_num_packed_bits_*len3)>>4, _num_packed_bits_, len3<<1)
-        @inbounds for row in 1:nq
-            j3 = _div3(row)
-            j1 = _div1(row)
-            d = _div32(row)
-            pow = _pow32(row)
-            T[d,j1,j3] = pow
-            T_inv[d,j1,j3] = pow
-        end
-        @inbounds for row in 1+len3<<_shift3_:nq+len3<<_shift3_
-            j3 = _div3(row)
-            j1 = _div1(row)
-            d = _div32(row)
-            pow = _pow32(row)
-            T[d,j1,j3] = pow
-            T_inv[d,j1,j3] = pow
-        end
-        symbols = zeros(UInt32, (_num_packed_bits_*len3)>>4, ns)
-    else
-        T = zeros(UInt32, 0,0,0)
-        T_inv = zeros(UInt32, 0,0,0)
-        symbols = zeros(UInt32, lens, _num_packed_bits_, len3<<1)
-    end
+    lens = Int(ceil(ns/8192))
     SymStabilizer(
-        nq, ns, len3, len4, enable_T,
+        nq, ns, len3, len4,
         zeros(Int64,_num_packed_bits_,len3<<1),
         fill(typemax(Int64), (_num_packed_bits_,len3<<1)),
         zeros(UInt8, _num_packed_bits_, 64, len3<<1, len4<<1),
         zeros(UInt8, _num_packed_bits_, len3<<1),
-        zeros(Bool, _num_packed_bits_, len3<<1),
-        symbols,
-        T,
-        T_inv,
+        zeros(UInt8, 1024, _num_packed_bits_, len3<<1, lens),
         zeros(UInt8, _num_packed_bits_, 64),
-        zeros(UInt32, 32),
-        zeros(Bool, ns)
+        zeros(UInt8, 1024, _num_packed_bits_)
     )
 end
 
-function all_zeros(::Type{SymStabilizer}, nq, ns;enable_T=false)
-    q = zero(SymStabilizer, nq, ns;enable_T=enable_T)
+function all_zeros(::Type{SymStabilizer}, nq, ns)
+    q = zero(SymStabilizer, nq, ns)
     id64 = 0x8040201008040201
     xzs64 = reinterpret(UInt64, q.xzs)
     ss = size(xzs64, 1)÷size(xzs64, 2)
@@ -154,7 +124,7 @@ end
 end
 
 # set a row to I for measurement
-function zero!(q::SymStabilizer, row;zero_T=false)
+function zero!(q::SymStabilizer, row)
     n1,_,n3,n4 = size(q.xzs)
     xzs = reshape(reinterpret(UInt512, q.xzs), n1,n3,n4)
 
@@ -167,33 +137,10 @@ function zero!(q::SymStabilizer, row;zero_T=false)
 
     q.phases[dr1,dr3] = zero(UInt8)
     
-    if q.enable_T
-        if zero_T
-            @turbo for j1 in axes(q.T, 1)
-                q.T[j1,dr1,dr3] = zero(UInt32)
-            end
-        else
-            # setting symbols to 0 is too time-consuming 
-            low = q.min_ns[dr1,dr3]
-            high = q.max_ns[dr1,dr3]
-            @inbounds for j in low:high
-                cnt = zero(UInt32)
-                @turbo for k in axes(q.symbols, 1)
-                    cnt += count_ones(q.T[k,dr1,dr3] & q.symbols[k,j])
-                end
-                if cnt&1!=0
-                    @turbo for k1 in axes(q.symbols, 1)
-                        q.symbols[k1,j] ⊻= q.T_inv[k1, dr1, dr3]
-                    end
-                end
-            end
+    for j4 in _div4s(q.min_ns[dr1,dr3]):_div4s(q.max_ns[dr1,dr3])
+        @turbo for j1 in axes(q.symbols, 1)
+            q.symbols[j1,dr1,dr3,j4] = zero(UInt8)
         end
-    else
-        l = _div32(q.min_ns[dr1,dr3])
-        h = _div32(q.max_ns[dr1,dr3])
-        @turbo for j in l:h
-            q.symbols[j,dr1,dr3] = zero(UInt32)
-        end 
     end
 
     q.min_ns[dr1,dr3] = typemax(Int64)
@@ -202,8 +149,8 @@ function zero!(q::SymStabilizer, row;zero_T=false)
     nothing
 end
 
-# swap two rows for measurement
-function rowswap!(q::SymStabilizer, t, s)
+# for measurement
+function rowcopy!(q::SymStabilizer, t, s)
     n1,_,n3,n4 = size(q.xzs)
     xzs = reshape(reinterpret(UInt512, q.xzs), n1,n3,n4)
 
@@ -216,45 +163,28 @@ function rowswap!(q::SymStabilizer, t, s)
         xzs[dt1,dt3,j4], xzs[ds1,ds3,j4] = xzs[ds1,ds3,j4], xzs[dt1,dt3,j4]
     end
 
-    q.phases[dt1,dt3], q.phases[ds1,ds3] = q.phases[ds1,ds3], q.phases[dt1,dt3]
+    q.phases[dt1,dt3] = q.phases[ds1,ds3]
 
-    if q.enable_T
-        @turbo for j1 in axes(q.T, 1)
-            a1, b1 = q.T[j1,dt1,dt3], q.T[j1,ds1,ds3]
-            q.T[j1,ds1,ds3] = a1
-            q.T[j1,dt1,dt3] = b1
-            a2, b2 = q.T_inv[j1,dt1,dt3], q.T_inv[j1,ds1,ds3]
-            q.T_inv[j1,ds1,ds3] = a2
-            q.T_inv[j1,dt1,dt3] = b2
-        end
-    else
-        l = _div32(min(q.min_ns[dt1,dt3], q.min_ns[ds1,ds3]))
-        h = _div32(max(q.max_ns[dt1,dt3], q.max_ns[ds1,ds3]))
-        @turbo for j in l:h#axes(q.symbols, 1)
-            a, b = q.symbols[j,ds1,ds3], q.symbols[j,dt1,dt3]
-            q.symbols[j,ds1,ds3] = b
-            q.symbols[j,dt1,dt3] = a
+    l = _div4s(min(q.min_ns[ds1,ds3], q.min_ns[dt1,dt3]))
+    h = _div4s(max(q.max_ns[ds1,ds3], q.max_ns[dt1,dt3]))
+
+    for j4 in l:h
+        @turbo for j1 in axes(q.symbols, 1)
+            q.symbols[j1,dt1,dt3,j4] = q.symbols[j1,ds1,ds3,j4]
         end
     end
 
-    q.max_ns[dt1,dt3], q.max_ns[ds1,ds3] = q.max_ns[ds1,ds3], q.max_ns[dt1,dt3]
-    q.min_ns[dt1,dt3], q.min_ns[ds1,ds3] = q.min_ns[ds1,ds3], q.min_ns[dt1,dt3]
+    q.max_ns[dt1,dt3] = q.max_ns[ds1,ds3]
+    q.min_ns[dt1,dt3] = q.min_ns[ds1,ds3]
 
     nothing
 end
 
-function _isone(q::SymStabilizer, i1, i3, l)
-    if q.enable_T
-        cnt = zero(UInt32)
-        @inbounds @simd for j1 in axes(q.symbols, 1)
-            cnt ⊻= q.T[j1,i1,i3] & q.symbols[j1,l]
-        end
-        return count_ones(cnt)&1!=0
-    else
-        d = _div32(l)
-        pow = _pow32(l)
-        return q.symbols[d,i1,i3]&pow!=0
-    end
+function _isone(q::SymStabilizer, i1, i3, s)
+    s1 = _div1s(s)
+    s4 = _div4s(s)
+    pow = _pow(s)
+    q.symbols[s1,i1,i3,s4]&pow!=0
 end
 
 include("transpose.jl")
