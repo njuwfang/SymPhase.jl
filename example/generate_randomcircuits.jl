@@ -22,10 +22,10 @@ function generate_random_circuit(n;depolarization=false,n_cnot=false)
 end
 
 for (dep,n_cnot) in [(false,false), (false, true), (true, true)]
-@info "($dep, $n_cnot)"
+@info "dep = $dep, CNOT = $n_cnot)"
 for j in 10:10:1000
     @info "j = $j"
-    suffix = dep ? n_cnot ? "_$(j>>1)CNOT_dep" : "_$(j>>1)CNOT" : ""
+    suffix = dep ? n_cnot ? "_$(j>>1)CNOT_dep" : "_dep" : n_cnot ? "_$(j>>1)CNOT" : ""
     a = generate_random_circuit(j;depolarization=dep,n_cnot=n_cnot)
     filename = "./stim_benchmark/random$(j)$(suffix).stim"
     open(filename, "w") do io
