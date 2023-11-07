@@ -43,6 +43,11 @@ function transpose_symbols_d!(q::SymStabilizer, l, h)
     nothing
 end
 
+"""
+SIMD for matrix transposition
+http://parallelproject15s.appspot.com/2015/05/08/Project-Description.html
+"""
+
 @inline function _transpose_512x64!(A, B)
     n = _num_packed_bits_<<1#length(B)>>3
     Ar, Br = A, B

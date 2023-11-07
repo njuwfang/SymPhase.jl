@@ -8,7 +8,7 @@ c = parse_stim("./stim_benchmark/random10.stim")
 sampler = Sampler(c)
 
 for (dep,n_cnot) in [(false,false), (false, true), (true, true)]
-  @info "dep = $dep, CNOT = $n_cnot)"
+  @info "dep = $dep, CNOT = $n_cnot"
   suffix1 = dep ? n_cnot ? "CNOT_dep" : "_dep" : n_cnot ? "CNOT" : ""
 open("benchmark_symphase$(suffix1).dat", "w") do io
   println(io, "nq init_time sample_time")

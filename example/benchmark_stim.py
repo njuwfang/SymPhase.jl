@@ -6,7 +6,7 @@ sampler = circuit.compile_sampler()
 sampler.sample(shots=10000)
 
 for (dep,n_cnot) in [(False,False), (False, True), (True, True)]:
-    print(f"({dep}, {n_cnot})")
+    print(f"dep = {dep}, CNOT = {n_cnot}")
     if dep and n_cnot:
         suffix1 = "CNOT_dep"
     elif n_cnot:
