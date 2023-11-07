@@ -8,13 +8,12 @@ using PrecompileTools
 using LoopVectorization
 using SparseArrays
 using BitIntegers
-BitIntegers.@define_integers 2048
-BitIntegers.@define_integers 4096
+@define_integers 2048
+@define_integers 4096
 
 export SymStabilizer, cX, cY, cZ, cPhase, cHadamard, cCNOT
-export all_zeros, apply!, mul_left!, isX, isY, isZ, zero!, rowcopy!, rowswap!, parse_stim, Sampler
-export transpose_p!, transpose_d!, _transpose_16x_!, _transpose__x16!, projectZ!, _transposed_index, _isone, transpose_symbols_d!,transpose_symbols_p!, _transpose_512x1024!
-#export one, zero, copy
+export all_zeros, apply!, isX, isY, isZ, parse_stim, Sampler
+export transpose_p!, transpose_d!, projectZ!, transpose_symbols_d!, transpose_symbols_p!
 
 const _num_packed_bits_ = 512
 const _shift3_ = Int(log2(_num_packed_bits_))
