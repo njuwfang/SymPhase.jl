@@ -6,7 +6,7 @@
 [![Coverage](https://codecov.io/gh/njuwfang/SymPhase.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/njuwfang/SymPhase.jl)
 
 A high-performance Julia module for sampling stabilizer circuits by symbolizing the phases of Pauli strings.
-See [the arXiv paper describing SymPhase](https://arxiv.org).
+See [the arXiv paper describing SymPhase](http://arxiv.org/abs/2311.03906).
 
 ## Installation
 
@@ -18,29 +18,34 @@ To install it, run [Julia](https://julialang.org/) REPL and use:
 
 ## Benchmarks
 
-We have compared SymPhase.jl with Stim in [the arXiv paper](https://arxiv.org).
+We have compared SymPhase.jl with Stim in [the arXiv paper](http://arxiv.org/abs/2311.03906).
 
-To reproduce the experiment, follow this procedure
+To reproduce the experiment, follow the procedure:
 
-1. Install Stim (das of 7/11/2023, the latest stable version is 1.12.0) with `pip`.
-    ```
+1. Install Stim (as of 7/11/2023, the latest stable version is 1.12.0) with `pip`.
+    ```bash
     pip install stim==1.12.0
     ```
-2. Go to the `example` directory and generate benchmark files in `.stim` format.
+2. Follow the instruction [Installation](#installation) to install Symphase.jl.
+3. Clone this repo and go to the `example` directory.
+    ```bash
+    git clone https://github.com/njuwfang/SymPhase.jl.git && cd ./SymPhase.jl/example/
     ```
+4. Generate benchmark files (in `.stim` format).
+    ```bash
     julia generate_randomcircuits.jl
     ```
 
-    Each circuit is made up of n qubits with n layers. Each layer randomly applies an H, S and I gate to each qubit, then applies CNOT gates, then samples 5\% of the qubits to measure in the computational basis. At the end of the circuit, each qubit is measured in the computational basis.
-    - for `./stim_benchmark/randomxxx.stim`, each layer randomly selects 5 pairs (1 pair in Stim's paper) of qubits to apply CNOT gates.
-    - for `./stim_benchmark/randomxxx_xxxCNOT.stim`, each layer randomly selects $\lfloor\frac{n}{2}\rfloor$ pairs of qubits to apply CNOT gates.
-    - for `./stim_benchmark/randomxxx_xxxCNOT_dep.stim`, each layer randomly selects $\lfloor\frac{n}{2}\rfloor$ pairs of qubits to apply CNOT gates and additionally applies single-qubit depolarize noise to each qubit.
+    Each circuit is made up of $n$ qubits with $n$ layers. Each layer randomly applies an $H$, $S$ and $I$ gate to each qubit, then applies $\mathit{CNOT}$ gates, then samples 5\% of the qubits to measure in the computational basis. At the end of the circuit, each qubit is measured in the computational basis.
+    - for `./stim_benchmark/randomxxx.stim`, each layer randomly selects 5 pairs (1 pair in Stim's paper) of qubits to apply $\mathit{CNOT}$ gates.
+    - for `./stim_benchmark/randomxxx_xxxCNOT.stim`, each layer randomly selects $\lfloor\frac{n}{2}\rfloor$ pairs of qubits to apply $\mathit{CNOT}$ gates.
+    - for `./stim_benchmark/randomxxx_xxxCNOT_dep.stim`, each layer randomly selects $\lfloor\frac{n}{2}\rfloor$ pairs of qubits to apply $\mathit{CNOT}$ gates and additionally applies single-qubit depolarize noise to each qubit.
 
-3. Benchmark Stim and SymPhase.jl.
-    ```
+5. Benchmark Stim and SymPhase.jl.
+    ```bash
     python benchmark_stim.py
     ```
-    ```
+    ```bash
     julia benchmark_symphase.jl
     ```
     The benchmark results are stored in files with the `.dat` suffix.
