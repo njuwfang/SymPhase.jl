@@ -43,7 +43,7 @@ To reproduce the experiment, follow the procedure:
 
 5. Benchmark Stim and SymPhase.jl.
     ```bash
-    python benchmark_stim.py
+    python3 benchmark_stim.py
     ```
     ```bash
     julia benchmark_symphase.jl
