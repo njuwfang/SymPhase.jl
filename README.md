@@ -10,7 +10,7 @@ See [the arXiv paper describing SymPhase](http://arxiv.org/abs/2311.03906).
 
 ## Installation
 
-To install it, run [Julia](https://julialang.org/) REPL and use:
+To install it, run [Julia 1.9+](https://julialang.org/downloads/) REPL and use:
 
 ```
 ] add https://github.com/njuwfang/SymPhase.jl.git
