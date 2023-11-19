@@ -1,4 +1,5 @@
-ENV["JULIA_PKG_USING_AUTOINSTALL"] = "yes"
+using Pkg
+"StatsBase" in keys(Pkg.project().dependencies) || Pkg.add("StatsBase")
 using StatsBase: sample
 
 mkpath("./stim_benchmark/")
