@@ -112,32 +112,27 @@ function biased_random_bits!(p, C::BitVector)
     elseif p < 0.02#0390625 # 1/2^8
         set_biased_random_bits!(p, C)
     else
-        BUCKETS = float(1 << 8)
+        Cc = C.chunks
+        COIN_FLIPS = 8
+        BUCKETS = float(1 << COIN_FLIPS)
         raised = p * BUCKETS
         raised_floor = floor(raised)
         p_left = (raised - raised_floor) / (BUCKETS - raised_floor)
-        p_threshold = UInt8(raised_floor)
+        p_top_bits = UInt64(raised_floor)
 
-        Cc = C.chunks
-        C8 = rand(UInt8, length(Cc)<<6)
-
-        pw = Vector{UInt64}(undef, 64)
-        pw[1] = one(UInt64)
-        @inbounds for j in 2:64
-            pw[j] = pw[j-1]<<1
-        end
-
-        @turbo for n in axes(Cc, 1)
-            Cc[n] = zero(UInt64)
-            for j in 1:64
-                Cc[n] += C8[(n-1)<<6+j] >= p_threshold ? zero(UInt64) : pw[j]
+        for j in eachindex(Cc)
+            result = zero(UInt64)
+            alive = rand(UInt64)
+            for k_bit = (COIN_FLIPS-2):-1:0
+                shoot = rand(UInt64)
+                result ⊻= shoot & alive & -((p_top_bits>>k_bit) & 1)
+                alive &= ~shoot
             end
+            Cc[j] = result
         end
 
         or_biased_random_bits!(p_left, C)
     end
-
-    C
 end
 
 function set_biased_random_bits!(p, C::BitVector)
@@ -166,7 +161,7 @@ function set_biased_random_bits!(p, C::Vector{UInt64})
     N = size(C,1)<<6
     k = geo(p) + 1
     while k <= N
-        C[_div64(k)] ⊻= _pow64(j)
+        C[_div64(k)] ⊻= _pow64(k)
         k += geo(p) + 1
     end
 end
