@@ -20,6 +20,7 @@ open("benchmark_symphase$(suffix1).dat", "w") do io
     t1 = time()
     sampler(10000)
     t2 = time()
+    (GC.gc(); GC.gc(); GC.gc(); GC.gc()) # gc caused time exception
     println(io, "$(j) $(t1-t0) $(t2-t1)")
     println("$(j) $(t1-t0) $(t2-t1)")
   end
