@@ -31,6 +31,7 @@ end
 @SymGate1 Depolarize1
 
 @SymGate2 CNOT
+@SymGate2 SWAP
 @SymGate2 Depolarize2
 
 function apply!(q::SymStabilizer, gate::cHadamard)
@@ -223,6 +224,50 @@ function apply!(q::SymStabilizer, gate::cCNOT)
             q.xzs[j1,d2x2,j3,d2x4] ⊻= x1*pow2
             q.xzs[j1,d1z2,j3,d1z4] ⊻= z2*pow1
             q.phases[j1,j3] ⊻= (x1&z1&x2&z2)|(x1&z2&(~(z1|x2)))
+        end
+    end
+
+    nothing
+end
+
+function apply!(q::SymStabilizer, gate::cSWAP)
+    a1 = gate.q1
+    a2 = gate.q2
+
+    d1x4 = _div4(a1)
+    d1z4 = d1x4+q.len4
+    d1x2 = _div2(a1)
+    d1z2 = d1x2
+    pow1 = _pow(a1)
+    d2x4 = _div4(a2)
+    d2z4 = d2x4+q.len4
+    d2x2 = _div2(a2)
+    d2z2 = d2x2
+    pow2 = _pow(a2)
+
+    if d1x2 == d2x2 && d1x4 == d2x4
+        @turbo for j3 in axes(q.xzs, 3)
+            for j1 in axes(q.xzs, 1)
+                x1, z1 = q.xzs[j1,d1x2,j3,d1x4]&pow1!=0, q.xzs[j1,d1z2,j3,d1z4]&pow1!=0
+                x2, z2 = q.xzs[j1,d2x2,j3,d2x4]&pow2!=0, q.xzs[j1,d2z2,j3,d2z4]&pow2!=0
+
+                q.xzs[j1,d1x2,j3,d1x4] ⊻= (x1⊻x2)*(pow1⊻pow2)
+                q.xzs[j1,d1z2,j3,d1z4] ⊻= (z1⊻z2)*(pow1⊻pow2)
+                
+            end
+        end
+    else
+        @turbo for j3 in axes(q.xzs, 3)
+            for j1 in axes(q.xzs, 1)
+                x1, z1 = q.xzs[j1,d1x2,j3,d1x4]&pow1!=0, q.xzs[j1,d1z2,j3,d1z4]&pow1!=0
+                x2, z2 = q.xzs[j1,d2x2,j3,d2x4]&pow2!=0, q.xzs[j1,d2z2,j3,d2z4]&pow2!=0
+                
+                q.xzs[j1,d1x2,j3,d1x4] ⊻= (x1⊻x2)*pow1
+                q.xzs[j1,d2x2,j3,d2x4] ⊻= (x1⊻x2)*pow2
+
+                q.xzs[j1,d1z2,j3,d1z4] ⊻= (z1⊻z2)*pow1
+                q.xzs[j1,d2z2,j3,d2z4] ⊻= (z1⊻z2)*pow2
+            end
         end
     end
 

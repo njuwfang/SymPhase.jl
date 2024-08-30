@@ -11,7 +11,7 @@ using BitIntegers
 @define_integers 2048
 @define_integers 4096
 
-export SymStabilizer, cX, cY, cZ, cPhase, cHadamard, cCNOT
+export SymStabilizer, cX, cY, cZ, cPhase, cHadamard, cCNOT, cSWAP
 export all_zeros, apply!, isX, isY, isZ, parse_stim, Sampler
 export transpose_p!, transpose_d!, projectZ!, transpose_symbols_d!, transpose_symbols_p!
 
