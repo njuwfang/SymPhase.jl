@@ -103,7 +103,7 @@ function apply!(q::SymStabilizer, gate::cX, symbol_index;do_transpose=true)
         offsetz = (dz4-1)*n3*n2*n1 + (j3-1)*n2*n1 + (dz2-1)*n1
         offsets = (ds4-1)*m3*m1*m2 + (j3-1)*m1*m2 + (ds1-1)*m2
         @inbounds @simd for j1 in axes(q.xzs, 1)
-            q.symbols[j1+offsets] = (q.xzs[j1+offsetz]&pow)<<shift
+            q.symbols[j1+offsets] ⊻= (q.xzs[j1+offsetz]&pow)<<shift
         end
     end
     if do_transpose
@@ -149,7 +149,7 @@ function apply!(q::SymStabilizer, gate::cY, symbol_index;do_transpose=true)
         offsets = (ds4-1)*m3*m1*m2 + (j3-1)*m1*m2 + (ds1-1)*m2
         @inbounds @simd for j1 in axes(q.xzs, 1)
             x, z = q.xzs[j1+offsetx], q.xzs[j1+offsetz]
-            q.symbols[j1+offsets] = ((x⊻z)&pow)<<shift
+            q.symbols[j1+offsets] ⊻= ((x⊻z)&pow)<<shift
         end
     end
     if do_transpose
@@ -191,7 +191,7 @@ function apply!(q::SymStabilizer, gate::cZ, symbol_index;do_transpose=true)
         offsetx = (dx4-1)*n3*n2*n1 + (j3-1)*n2*n1 + (dx2-1)*n1
         offsets = (ds4-1)*m3*m1*m2 + (j3-1)*m1*m2 + (ds1-1)*m2
         @inbounds @simd for j1 in axes(q.xzs, 1)
-            q.symbols[j1+offsets] = (q.xzs[j1+offsetx]&pow)<<shift
+            q.symbols[j1+offsets] ⊻= (q.xzs[j1+offsetx]&pow)<<shift
         end
     end
     if do_transpose

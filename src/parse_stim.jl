@@ -42,7 +42,7 @@ function take_id(s, i=0)
     end
     while i <= lastindex(s)
         c = s[i]
-        if !(_isletter(c) || isdigit(c) || c == '-')
+        if !(_isletter(c) || isdigit(c) || c == '_')
             break
         end
         i += 1

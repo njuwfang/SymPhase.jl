@@ -179,6 +179,32 @@ function rowcopy!(q::SymStabilizer, t, s)
     nothing
 end
 
+function update_symbols_range!(q::SymStabilizer, ls, hs)
+    for j3 in axes(q.xzs, 3)
+        for j1 in axes(q.xzs, 1)
+            l = min(q.min_ns[j1,j3], ls)
+            h = max(q.max_ns[j1,j3], hs)
+            symbols = reinterpret(UInt4096, q.symbols)
+            nl4 = findfirst(x->~iszero(x), (@views symbols[:,j1,j3,_div4s(l):_div4s(h)]))
+            if nl4!==nothing
+                nl1 = findfirst(x->~iszero(x), (@views q.symbols[:,j1,j3,nl4[2]]))
+                q.min_ns[j1,j3] = 1+(nl1-1)*8+(nl4[2]-1)<<13
+            else
+                q.min_ns[j1,j3] = typemax(Int64)
+            end
+                
+            nh4 = findlast(x->~iszero(x), (@views symbols[:,j1,j3,_div4s(l):_div4s(h)]))
+            if nh4!==nothing
+                nh1 = findlast(x->~iszero(x), (@views q.symbols[:,j1,j3,nh4[2]]))
+                q.max_ns[j1,j3] = nh1*8+(nh4[2]-1)<<13
+            else
+                q.max_ns[j1,j3] = zero(Int64)
+            end
+        end
+    end
+    nothing
+end
+
 function _isone(q::SymStabilizer, i1, i3, s)
     s1 = _div1s(s)
     s4 = _div4s(s)

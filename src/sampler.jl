@@ -41,6 +41,7 @@ using SparseArrays
             push!(op_symbol, DEPOLARIZE1, c.args[1])
         end
         transpose_symbols_p!(q, l, h)
+        update_symbols_range!(q, ns+1-c.target_inds[1]<<1, ns)
     elseif op == CX
         for k in 1:2:c.target_inds[1]
             apply!(q, cCNOT(c.targets[k], c.targets[k+1]))
@@ -55,6 +56,7 @@ using SparseArrays
             push!(op_symbol, DEPOLARIZE2, c.args[1])
         end
         transpose_symbols_p!(q, l, h)
+        update_symbols_range!(q, ns+1-c.target_inds[1]<<2, ns)
     elseif op == M
         transpose_p!(q)
         for k in 1:c.target_inds[1]
@@ -109,6 +111,7 @@ using SparseArrays
                 push!(op_symbol, DEPOLARIZE1, c.args[j])
             end
             transpose_symbols_p!(q, l, h)
+            update_symbols_range!(q, ns+1-(c.target_inds[j]-c.target_inds[j-1])<<1, ns)
         elseif op == CX
             for k in c.target_inds[j-1]+1:2:c.target_inds[j]
                 apply!(q, cCNOT(c.targets[k], c.targets[k+1]))
@@ -123,6 +126,7 @@ using SparseArrays
                 push!(op_symbol, DEPOLARIZE2, c.args[j])
             end
             transpose_symbols_p!(q, l, h)
+            update_symbols_range!(q, ns+1-(c.target_inds[j]-c.target_inds[j-1])<<2, ns)
         elseif op == M
             transpose_p!(q)
             for k in c.target_inds[j-1]+1:c.target_inds[j]
